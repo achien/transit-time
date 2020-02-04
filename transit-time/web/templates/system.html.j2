@@ -1,0 +1,21 @@
+<html>
+  <head>
+    <title>{{system_name}}</title>
+  </head>
+  <body>
+    {% for color in routes_by_color %}
+      <div style='background-color:{{color}}'>&nbsp;</div>
+      <ul>
+        {% for route in routes_by_color[color] %}
+          <li>
+            <a href="{{ 
+              url_for("schedule:route", system=system.value, route_id=route["route_id"])
+            }}">
+              {{route['route_short_name']}} - {{route['route_long_name']}}
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endfor %}
+  </body>
+</html>

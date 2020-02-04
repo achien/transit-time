@@ -1,0 +1,32 @@
+<html>
+  <head>
+    <title>{{stop["stop_name"]}} - {{route["route_short_name"]}}</title>
+  </head>
+  <body>
+    {% for stop_id in stop_times_by_stop_id %}
+    <h1>{{stop_id}}</h1>
+      <ul>
+        {% for stop_time in stop_times_by_stop_id[stop_id] %}
+            <li>
+              {{stop_time['departure'].astimezone(timezone)}}
+              {% if stop_time['scheduled_departure'] is not none %}
+                (
+                  {%- if stop_time['departure_delta_minutes'] == 0 -%}
+                    on time
+                  {%- elif stop_time['departure_delta_minutes'] == 1 -%}
+                    1 minute early
+                  {%- elif stop_time['departure_delta_minutes'] == -1 -%}
+                    1 minute early
+                  {%- elif stop_time['departure_delta_minutes'] > 0 -%}
+                    {{stop_time['departure_delta_minutes']}} minutes late
+                  {%- else -%}
+                    {{ -1 * stop_time['departure_delta_minutes'] }} minutes early
+                  {%- endif %}
+                  : {{stop_time['scheduled_departure']}})
+              {% endif %}
+            </li>
+        {% endfor %}
+      </ul>
+    {% endfor %}
+  </body>
+</html>

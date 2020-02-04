@@ -1,0 +1,26 @@
+<html>
+  <head>
+    <title>
+      {{route["route_short_name"]}} - {{route["route_long_name"]}}
+      ({{system_name}})
+    </title>
+  </head>
+  <body>
+    <ul>
+      {% for stop in stops %}
+            <li>
+              <a href={{
+                url_for(
+                  "schedule:stop",
+                  system=system.value,
+                  route_id=route["route_id"],
+                  stop_id=stop["stop_id"],
+                )
+              }}>
+                {{stop["stop_name"]}}
+              </a>
+            </li>
+      {% endfor %}
+    </ul>
+  </body>
+</html>

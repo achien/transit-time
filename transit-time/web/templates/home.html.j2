@@ -1,0 +1,20 @@
+<html>
+  <head>
+    <title>{{Transit}}</title>
+  </head>
+  <body>
+    <div>
+      <p>
+        <a href="/timelapse/">Timelapse</a>
+      </p>
+    </div>
+
+    {% for system in system_names %}
+      <p>
+        <a href="{{url_for("schedule:system", system=system)}}">
+          {{system_names[system]}}
+        </a>
+      </p>
+    {% endfor %}
+  </body>
+</html>

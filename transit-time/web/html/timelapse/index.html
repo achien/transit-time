@@ -1,0 +1,79 @@
+<html>
+  <head>
+    <title>Timelapse</title>
+  </head>
+  <body>
+    <div>
+      <div id="coords" style="position:absolute;font-size:12px;z-index:3"></div>
+      <div style="position:absolute">
+        <div id="time" style="font-size:24px"></div>
+        <div id="frame-time" style="font-size:12px"></div>
+      </div>
+      <canvas
+        id="map-layer"
+        width="1024"
+        height="768"
+        style="position:absolute;z-index:1"
+      ></canvas>
+      <canvas
+        id="trains-layer"
+        width="1024"
+        height="768"
+        style="position:absolute;z-index:2"
+      ></canvas>
+    </div>
+    <div style="position:absolute;left:1024px">
+      <div style="display:inline-block">
+        <form id="query">
+          <table>
+            <tr>
+              <td><label for="start-input">Start:</label></td>
+              <td>
+                <input
+                  type="text"
+                  name="start"
+                  id="start-input"
+                  value="-3 hours"
+                />
+              </td>
+            </tr>
+            <tr>
+              <td><label for="end-input">End:</label></td>
+              <td>
+                <input type="text" name="end" id="end-input" value="now" />
+              </td>
+            </tr>
+          </table>
+
+          <div style="text-align:right">
+            <input type="submit" value="Go" />
+          </div>
+        </form>
+      </div>
+      <br />
+      <br />
+      <div>
+        <label for="speed-input">Timelapse speed:</label>
+        <input
+          type="text"
+          style="width:50px"
+          name="speed"
+          id="speed-input"
+          value="600"
+        />
+      </div>
+      <br />
+      <br />
+      <div>
+        <div><b>Space</b> - Pause the timelapse</div>
+        <div><b>0</b> - Go back to beginning of the timelapse</div>
+      </div>
+      <br />
+      <br />
+      <div>
+        <input type="checkbox" name="debug" id="debug-input" />
+        <label for="debug-input">Show debug info</label>
+      </div>
+    </div>
+  </body>
+</html>

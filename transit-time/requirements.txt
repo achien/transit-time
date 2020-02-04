@@ -1,0 +1,15 @@
+aiofiles
+aiohttp[speedups]
+aiopg
+async_lru
+dateparser
+GeoAlchemy2
+google-cloud-logging
+gunicorn
+Jinja2
+protobuf
+pytest
+python-dateutil
+SQLAlchemy
+starlette
+uvicorn
