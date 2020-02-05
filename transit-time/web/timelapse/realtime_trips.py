@@ -11,6 +11,7 @@ import db
 from scraper.gtfs import gtfs
 
 TRANSIT_SYSTEM = gtfs.TransitSystem.NYC_MTA
+TIMEZONE = "America/New_York"
 
 
 DEFAULT_START = "1 hour ago"
@@ -22,7 +23,11 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
         start_str = request.query_params.get("start", DEFAULT_START)
         end_str = request.query_params.get("end", DEFAULT_END)
         now = datetime.now(timezone.utc)
-        dateparser_settings = {"RELATIVE_BASE": now, "RETURN_AS_TIMEZONE_AWARE": True}
+        dateparser_settings = {
+            "RELATIVE_BASE": now,
+            "RETURN_AS_TIMEZONE_AWARE": True,
+            "TIMEZONE": TIMEZONE,
+        }
         start = dateparser.parse(start_str, settings=dateparser_settings)
         if start is None:
             start = dateparser.parse(DEFAULT_START, settings=dateparser_settings)
