@@ -89,6 +89,7 @@ let start: number;
 let startWall: number;
 let tripData: any;
 let draw: () => void;
+let animationFrameRequestID: number | null = null;
 let paused = false;
 let indexes: Record<string, number>;
 
@@ -100,6 +101,9 @@ function toggleDraw() {
   } else {
     paused = true;
     start += (Date.now() / 1000 - startWall) * timeRatio;
+    if (animationFrameRequestID != null) {
+      window.cancelAnimationFrame(animationFrameRequestID);
+    }
   }
 }
 
@@ -207,11 +211,9 @@ async function drawTrains(
   let lastWall = startWall;
   let frameCounter = 0;
   draw = function() {
+    animationFrameRequestID = null;
     // Abort if we've started drawing something else
     if (currentlyDrawing !== tripData) {
-      return;
-    }
-    if (paused) {
       return;
     }
 
@@ -296,7 +298,7 @@ async function drawTrains(
     }
 
     if (simTime < end) {
-      window.requestAnimationFrame(draw);
+      animationFrameRequestID = window.requestAnimationFrame(draw);
     }
   };
   draw();
@@ -376,6 +378,7 @@ async function main() {
       } else {
         timeRatio = newSpeed;
       }
+      console.log('Set new speed: ' + newSpeed);
     } else {
       speedInput.value = timeRatio.toString();
     }
@@ -390,9 +393,8 @@ async function main() {
         e.preventDefault();
         reset();
         if (paused) {
-          paused = false;
-          draw();
-          paused = true;
+          toggleDraw();
+          toggleDraw();
         }
       }
     }
