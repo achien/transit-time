@@ -7,14 +7,15 @@ from async_lru import alru_cache
 from dateutil.tz import gettz
 from starlette.endpoints import HTTPEndpoint
 
+import a
 import db
-from scraper.gtfs import gtfs
+from scraper.gtfs.gtfs import TransitSystem
 from web import templates
 
 
 class Stop(HTTPEndpoint):
     async def get(self, request):
-        system = gtfs.TransitSystem(request.path_params["system"])
+        system = TransitSystem(request.path_params["system"])
         route_id = request.path_params["route_id"]
         stop_id = request.path_params["stop_id"]
 
@@ -50,10 +51,14 @@ class Stop(HTTPEndpoint):
         )
         stop_times_by_stop_id = {}
         for rst in realtime_stop_times:
-            stop_id = rst["stop_id"]
-            if stop_id not in stop_times_by_stop_id:
-                stop_times_by_stop_id[stop_id] = []
-            stop_times_by_stop_id[stop_id].append(rst)
+            sid = rst["stop_id"]
+            if sid not in stop_times_by_stop_id:
+                stop_times_by_stop_id[sid] = []
+            stop_times_by_stop_id[sid].append(rst)
+
+        stop_id_names = await a.gatherd(
+            {sid: self.get_stop_id_name(system, sid) for sid in stop_times_by_stop_id}
+        )
 
         return templates.get().TemplateResponse(
             "stop.html.j2",
@@ -61,10 +66,21 @@ class Stop(HTTPEndpoint):
                 "request": request,
                 "route": route,
                 "stop": stop,
+                "stop_id_names": stop_id_names,
                 "stop_times_by_stop_id": stop_times_by_stop_id,
                 "timezone": timezone,
             },
         )
+
+    async def get_stop_id_name(self, system: TransitSystem, stop_id: str) -> str:
+        stop = await self.query_stop(system, stop_id)
+        if system == TransitSystem.NYC_MTA:
+            # MTA codes northbound/southbound platforms with N and S suffixes
+            if stop_id.endswith("S"):
+                return "Southbound: {} ({})".format(stop["stop_name"], stop_id)
+            elif stop_id.endswith("N"):
+                return "Northbound: {} ({})".format(stop["stop_name"], stop_id)
+        return "{} - ({})".format(stop["stop_name"], stop_id)
 
     def friendly_time(self, dt: datetime):
         (sign, time_part, total_seconds) = self._relative_time_helper(
@@ -126,7 +142,7 @@ class Stop(HTTPEndpoint):
         return (sign, " ".join(time_parts), total_seconds)
 
     async def query_realtime_stop_times(
-        self, system: gtfs.TransitSystem, route_id: str, stop_ids: List[str]
+        self, system: TransitSystem, route_id: str, stop_ids: List[str]
     ):
         async with db.acquire_conn() as conn:
             res = await conn.execute(
@@ -145,15 +161,17 @@ class Stop(HTTPEndpoint):
                     rst.system = %s
                     and rst.route_id = %s
                     and rst.stop_id in %s
+                    and rst.departure >= %s
                 """,
                 system.value,
                 route_id,
                 tuple(stop_ids),
+                datetime.now(timezone.utc) - timedelta(days=1),
             )
             return await res.fetchall()
 
     @alru_cache
-    async def query_timezone(self, system: gtfs.TransitSystem):
+    async def query_timezone(self, system: TransitSystem):
         agency = db.get_table("agency")
         async with db.acquire_conn() as conn:
             res = await conn.execute(
@@ -163,7 +181,7 @@ class Stop(HTTPEndpoint):
             return gettz(row.agency_timezone)
 
     @alru_cache
-    async def query_stop_and_parents(self, system: gtfs.TransitSystem, stop_id: str):
+    async def query_stop_and_parents(self, system: TransitSystem, stop_id: str):
         stops = db.get_table("stops")
         async with db.acquire_conn() as conn:
             res = await conn.execute(
@@ -178,7 +196,7 @@ class Stop(HTTPEndpoint):
             return await res.fetchall()
 
     @alru_cache
-    async def query_stop(self, system: gtfs.TransitSystem, stop_id: str):
+    async def query_stop(self, system: TransitSystem, stop_id: str):
         stops = db.get_table("stops")
         async with db.acquire_conn() as conn:
             res = await conn.execute(
@@ -191,7 +209,7 @@ class Stop(HTTPEndpoint):
         return stop
 
     @alru_cache
-    async def query_route(self, system: gtfs.TransitSystem, route_id: str):
+    async def query_route(self, system: TransitSystem, route_id: str):
         routes = db.get_table("routes")
         async with db.acquire_conn() as conn:
             res = await conn.execute(

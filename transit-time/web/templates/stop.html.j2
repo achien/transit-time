@@ -4,10 +4,10 @@
     <title>{{stop["stop_name"]}} - {{route["route_short_name"]}}</title>
   </head>
   <body>
-    {% for stop_id in stop_times_by_stop_id %}
-    <h1>{{stop_id}}</h1>
+    {% for sid in stop_times_by_stop_id %}
+    <h2>{{stop_id_names[sid]}}</h2>
       <ul>
-        {% for stop_time in stop_times_by_stop_id[stop_id] %}
+        {% for stop_time in stop_times_by_stop_id[sid] %}
             <li>
               {{stop_time['departure_str']}}
               {% if stop_time['scheduled_departure'] is not none %}
