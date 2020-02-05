@@ -139,21 +139,65 @@ function findNearbyTrips(x: number, y: number) {
   }
 }
 
+async function loadTrains() {
+  const startElem = <HTMLInputElement>document.getElementById('start-input');
+  const endElem = <HTMLInputElement>document.getElementById('end-input');
+
+  let url = new URL('/api/realtime-trips', new URL(window.location.href));
+  url.searchParams.set('start', startElem.value);
+  url.searchParams.set('end', endElem.value);
+  url.searchParams.set('paginate', '1');
+  let resp = await fetch(url.href);
+  let { start, end, cursor, tripData } = await resp.json();
+  console.log(
+    'Fetched tripData page: ' +
+      Object.keys(tripData).length +
+      ' trips, cursor: ' +
+      cursor,
+  );
+
+  while (cursor != null) {
+    url = new URL('/api/realtime-trips', new URL(window.location.href));
+    url.searchParams.set('cursor', cursor);
+    url.searchParams.set('paginate', '1');
+    resp = await fetch(url.href);
+    const respJson = await resp.json();
+    // Every page has the same start/end information, only the cursor and data
+    // will be different
+    assert.equal(respJson.start, start);
+    assert.equal(respJson.end, end);
+    const pageTripData = respJson.tripData;
+    cursor = respJson.cursor;
+    console.log(
+      'Fetched tripData page: ' +
+        Object.keys(pageTripData).length +
+        ' trips, cursor: ' +
+        cursor,
+    );
+
+    for (let tripID in pageTripData) {
+      if (!(tripID in tripData)) {
+        tripData[tripID] = pageTripData[tripID];
+      } else {
+        assert.equal(tripData[tripID].routeID, pageTripData[tripID].routeID);
+        tripData[tripID].stops = tripData[tripID].stops.concat(
+          pageTripData[tripID].stops,
+        );
+      }
+    }
+  }
+  return { start, end, tripData };
+}
+
 async function drawTrains(
   ctx: CanvasRenderingContext2D,
   path: d3.GeoPath,
   projection: d3.GeoProjection,
   graph: Graph,
 ) {
-  const startElem = <HTMLInputElement>document.getElementById('start-input');
-  const endElem = <HTMLInputElement>document.getElementById('end-input');
-  let url = new URL('/api/realtime-trips', new URL(window.location.href));
-  url.searchParams.set('start', startElem.value);
-  url.searchParams.set('end', endElem.value);
-  const resp = await fetch(url.href);
-  const respJson = await resp.json();
-  tripsStart = <number>respJson.start;
-  const { end, tripData } = respJson;
+  const trainsData = await loadTrains();
+  tripsStart = <number>trainsData.start;
+  const { end, tripData } = trainsData;
 
   console.log('Fetched tripData: ' + Object.keys(tripData).length + ' trips');
   currentTripData = tripData;
@@ -179,9 +223,9 @@ async function drawTrains(
 
   console.log(
     'Drawing trips between ' +
-      new Date(start * 1000) +
+      new Date(tripsStart * 1000).toLocaleString() +
       ' and ' +
-      new Date(end * 1000),
+      new Date(end * 1000).toLocaleString(),
   );
 
   reset();
