@@ -27,7 +27,7 @@ const ROUTE_COLORS: Record<string, string> = {
   W: '#FCCC0A',
 
   GS: '#808183',
-  FS: '808183',
+  FS: '#808183',
 
   '1': '#EE352E',
   '2': '#EE352E',
