@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from typing import List
 
 import sqlalchemy as sa
@@ -39,11 +39,11 @@ class Stop(HTTPEndpoint):
                 + minus_twelve_hours
             )
             if r["scheduled_departure"] is not None:
-                r["scheduled_departure"] = start_datetime + r["scheduled_departure"]
-                departure_delta = r["departure"] - r["scheduled_departure"]
-                r["departure_delta_minutes"] = round(
-                    (departure_delta.total_seconds() / 60)
+                r["departure_delta"] = self.departure_delta(
+                    r["departure"], start_datetime + r["scheduled_departure"]
                 )
+
+            r["departure_str"] = self.friendly_time(r["departure"].astimezone(timezone))
 
         realtime_stop_times = sorted(
             realtime_stop_times, key=lambda r: r["departure"], reverse=True
@@ -65,6 +65,65 @@ class Stop(HTTPEndpoint):
                 "timezone": timezone,
             },
         )
+
+    def friendly_time(self, dt: datetime):
+        (sign, time_part, total_seconds) = self._relative_time_helper(
+            dt, datetime.now(timezone.utc)
+        )
+        if total_seconds >= 24 * 60 * 60:
+            # If more than 1 day ago, show day
+            return dt.strftime("%-m/%-d/%y %-I:%M %p")
+        elif total_seconds >= 60 * 60:
+            # If more than 1 hour ago, show hours and minutes
+            return dt.strftime("%-I:%M %p")
+
+        hmm = dt.strftime("%-I:%M %p")
+        if sign == 0:
+            return "Departing now // {}".format(hmm)
+        elif sign == 1:
+            return "Departs in {} // {}".format(time_part, hmm)
+        else:
+            return "Departed {} ago // {}".format(time_part, hmm)
+
+    def departure_delta(self, scheduled: datetime, actual: datetime):
+        (sign, time_part, _) = self._relative_time_helper(scheduled, actual)
+        if sign == 0:
+            return "on time"
+        elif sign == 1:
+            return "{} late".format(time_part)
+        else:
+            return "{} early".format(time_part)
+
+    def _relative_time_helper(self, diff, base):
+        if diff > base:
+            sign = +1
+        elif diff == base:
+            sign = 0
+        else:
+            sign = -1
+        total_seconds = int(abs((diff - base).total_seconds()))
+        seconds = total_seconds % 60
+        total_minutes = total_seconds // 60
+        minutes = total_minutes % 60
+        hours = total_minutes // 60
+
+        time_parts = []
+        if hours > 1:
+            time_parts.append("{}h".format(hours))
+        elif hours == 1:
+            time_parts.append("1h")
+        if minutes > 1:
+            time_parts.append("{}m".format(minutes))
+        elif minutes == 1:
+            time_parts.append("1m")
+        # Don't display seconds if interval >= 10 minutes
+        if minutes < 10 and hours == 0:
+            if seconds > 1:
+                time_parts.append("{}s".format(seconds))
+            elif seconds == 1:
+                time_parts.append("1s")
+
+        return (sign, " ".join(time_parts), total_seconds)
 
     async def query_realtime_stop_times(
         self, system: gtfs.TransitSystem, route_id: str, stop_ids: List[str]
