@@ -1,6 +1,7 @@
 import logging
 import os
 
+import asyncpg
 import aiopg.sa
 import geoalchemy2 as ga
 import sqlalchemy as sa
@@ -20,25 +21,40 @@ def _get_postgres_info():
 
 
 _aiopg_engine = None
+_asyncpg_pool = None
 
 
 async def setup():
     global _aiopg_engine
     _aiopg_engine = await aiopg.sa.create_engine(**_get_postgres_info())
-    logging.info("Database connected: %s", _aiopg_engine.dsn)
+    logging.info("[aiopg] database connected: %s", _aiopg_engine.dsn)
+
+    global _asyncpg_pool
+    _asyncpg_pool = await asyncpg.create_pool(**_get_postgres_info())
+    logging.info("[asyncpg] database connected")
 
 
 async def teardown():
     global _aiopg_engine
     _aiopg_engine.close()
     await _aiopg_engine.wait_closed()
-    logging.info("Database connection closed: %s", _aiopg_engine.dsn)
+    logging.info("[aiopg] database connection closed: %s", _aiopg_engine.dsn)
     _aiopg_engine = None
+
+    global _asyncpg_pool
+    await _asyncpg_pool.close()
+    logging.info("[async] database connection closed")
+    _asyncpg_pool = None
 
 
 def acquire_conn():
     assert _aiopg_engine is not None
     return _aiopg_engine.acquire()
+
+
+def acquire_asyncpg_conn():
+    assert _asyncpg_pool is not None
+    return _asyncpg_pool.acquire()
 
 
 def get_sa_engine():

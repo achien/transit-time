@@ -2,6 +2,7 @@ aiofiles
 aiohttp[speedups]
 aiopg
 async_lru
+asyncpg
 dateparser
 GeoAlchemy2
 google-cloud-logging

@@ -2,7 +2,6 @@ import os
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
-from starlette.middleware.gzip import GZipMiddleware
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
@@ -12,8 +11,6 @@ from web import home, route, stop, system
 from web.timelapse import graph, realtime_trips
 
 logger.setup()
-
-middleware = [Middleware(GZipMiddleware, minimum_size=1000)]
 
 
 routes = [
@@ -47,6 +44,5 @@ app = Starlette(
     routes=routes,
     on_startup=[db.setup],
     on_shutdown=[db.teardown],
-    middleware=middleware,
     debug=(os.environ.get("ENV") != "PROD"),
 )

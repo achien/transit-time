@@ -48,25 +48,25 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
 
         trip_data = {}
         for row in rows:
-            key = "__".join((row.route_id, row.start_date.isoformat(), row.trip_id))
+            key = "__".join(
+                (row["route_id"], row["start_date"].isoformat(), row["trip_id"])
+            )
             if key not in trip_data:
                 trip_data[key] = {
                     "id": key,
-                    "routeID": row.route_id,
+                    "routeID": row["route_id"],
                     "stops": [],
                 }
+            arrival = row["arrival"]
+            departure = row["departure"]
             trip_data[key]["stops"].append(
                 {
-                    "stopID": row.stop_id,
+                    "stopID": row["stop_id"],
                     "arrival": (
-                        row.arrival.timestamp()
-                        if row.arrival
-                        else row.departure.timestamp()
+                        arrival.timestamp() if arrival else departure.timestamp()
                     ),
                     "departure": (
-                        row.departure.timestamp()
-                        if row.departure
-                        else row.arrival.timestamp()
+                        departure.timestamp() if departure else arrival.timestamp()
                     ),
                 }
             )
@@ -106,18 +106,19 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
             select route_id, start_date, trip_id, stop_id, arrival, departure
             from realtime_stop_times
             where
-                system=%s
+                system=$1
                 and (
-                    departure between %s and %s
-                    or (departure is null and arrival between %s and %s)
+                    departure between $2 and $3
+                    or (departure is null and arrival between $2 and $3)
                 )
             order by coalesce(departure, arrival)
         """
-        async with db.acquire_conn() as conn:
-            res = await conn.execute(
-                query, TRANSIT_SYSTEM.value, start, end, start, end,
-            )
-            rows = await res.fetchall()
+        async with db.acquire_asyncpg_conn() as conn:
+            # res = await conn.execute(
+            #     query, TRANSIT_SYSTEM.value, start, end, start, end,
+            # )
+            # rows = await res.fetchall()
+            rows = await conn.fetch(query, TRANSIT_SYSTEM.value, start, end)
         logging.info(
             "RealtimeTripsEndpoint: %d rows in chunk %d/%d",
             len(rows),
