@@ -77,24 +77,6 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
             )
         logging.info("RealtimeTripsEndpoint: constructed %d trip datas", len(trip_data))
 
-        # graph = await load_graph(TRANSIT_SYSTEM)
-        # for key in trip_data:
-        #     stops = trip_data[key]["stops"]
-        #     for i in range(len(stops) - 1):
-        #         stop = stops[i]
-        #         next_stop = stops[i + 1]
-        #         path = graph.shortest_path(
-        #             stop["stopID"], next_stop["stopID"], trip_data[key]["routeID"]
-        #         )
-        #         stop["path"] = (
-        #             None
-        #             if path is None or len(path) == 0
-        #             else [
-        #                 {"edgeID": str(x.edge_id), "direction": x.direction}
-        #                 for x in path
-        #             ]
-        #         )
-
         return JSONResponse(
             {"start": start.timestamp(), "end": end.timestamp(), "tripData": trip_data}
         )
@@ -113,16 +95,12 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
             where
                 system=$1
                 and (
-                    departure between $2 and $3
-                    or (departure is null and arrival between $2 and $3)
+                    departure >= $2 and departure < $3
+                    or (departure is null and arrival >= $2 and arrival < $3)
                 )
             order by coalesce(departure, arrival)
         """
         async with db.acquire_asyncpg_conn() as conn:
-            # res = await conn.execute(
-            #     query, TRANSIT_SYSTEM.value, start, end, start, end,
-            # )
-            # rows = await res.fetchall()
             rows = await conn.fetch(query, TRANSIT_SYSTEM.value, start, end)
         logging.info(
             "RealtimeTripsEndpoint: %d rows in chunk %d/%d",
