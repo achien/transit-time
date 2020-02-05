@@ -87,8 +87,8 @@ let timeRatio = 60;
 let tripsStart: number;
 let start: number;
 let startWall: number;
-let tripData: any;
-let draw: () => void;
+let currentTripData: any = null;
+let drawCurrent: () => void;
 let animationFrameRequestID: number | null = null;
 let paused = false;
 let indexes: Record<string, number>;
@@ -97,7 +97,7 @@ function toggleDraw() {
   if (paused) {
     paused = false;
     startWall = Date.now() / 1000;
-    draw();
+    drawCurrent();
   } else {
     paused = true;
     start += (Date.now() / 1000 - startWall) * timeRatio;
@@ -111,7 +111,7 @@ function reset() {
   start = tripsStart;
   startWall = Date.now() / 1000;
   indexes = {};
-  for (let tripID in tripData) {
+  for (let tripID in currentTripData) {
     indexes[tripID] = -1;
   }
 }
@@ -139,8 +139,6 @@ function findNearbyTrips(x: number, y: number) {
   }
 }
 
-let currentlyDrawing: any = null;
-
 async function drawTrains(
   ctx: CanvasRenderingContext2D,
   path: d3.GeoPath,
@@ -155,11 +153,10 @@ async function drawTrains(
   const resp = await fetch(url.href);
   const respJson = await resp.json();
   tripsStart = <number>respJson.start;
-  tripData = respJson.tripData;
-  const end = respJson.end;
+  const { end, tripData } = respJson;
 
-  currentlyDrawing = tripData;
   console.log('Fetched tripData: ' + Object.keys(tripData).length + ' trips');
+  currentTripData = tripData;
 
   const timer = Date.now();
   for (let tripID in tripData) {
@@ -210,10 +207,11 @@ async function drawTrains(
   startWall = Date.now() / 1000;
   let lastWall = startWall;
   let frameCounter = 0;
-  draw = function() {
+  let draw = function() {
     animationFrameRequestID = null;
     // Abort if we've started drawing something else
-    if (currentlyDrawing !== tripData) {
+    if (currentTripData !== tripData) {
+      console.log('Canceling old draw');
       return;
     }
 
@@ -301,7 +299,10 @@ async function drawTrains(
       animationFrameRequestID = window.requestAnimationFrame(draw);
     }
   };
-  draw();
+  drawCurrent = draw;
+  // toggleDraw twice to preserve paused state (instead of just calling draw())
+  toggleDraw();
+  toggleDraw();
 }
 
 function setupCanvas(
