@@ -25,8 +25,9 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
         (start, end, query_start, query_end) = self.get_time_range(request)
 
         next_cursor = None
-        paginate = int(request.query_params.get("paginate"))
-        if paginate:
+        paginate = request.query_params.get("paginate")
+        if paginate is not None:
+            paginate = int(paginate)
             if query_end - query_start > PAGE_SIZE:
                 # This query will be (query_start, query_start + PAGE_SIZE),
                 # so the next cursor encodes the remaining query of
