@@ -26,11 +26,11 @@ _asyncpg_pool = None
 
 async def setup():
     global _aiopg_engine
-    _aiopg_engine = await aiopg.sa.create_engine(**_get_postgres_info())
+    _aiopg_engine = await aiopg.sa.create_engine(minsize=0, **_get_postgres_info())
     logging.info("[aiopg] database connected: %s", _aiopg_engine.dsn)
 
     global _asyncpg_pool
-    _asyncpg_pool = await asyncpg.create_pool(**_get_postgres_info())
+    _asyncpg_pool = await asyncpg.create_pool(min_size=0, **_get_postgres_info())
     logging.info("[asyncpg] database connected")
 
 
