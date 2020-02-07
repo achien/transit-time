@@ -2,10 +2,13 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
+from http import HTTPStatus
 from typing import NamedTuple, Optional
 
 import sqlalchemy as sa
+from flask import Flask, Response
 
 import c
 import db
@@ -172,5 +175,17 @@ async def main_wrapper():
         await db.teardown()
 
 
-if __name__ == "__main__":
+def main_flask_wrapper():
     asyncio.run(main_wrapper())
+    return Response(status=HTTPStatus.OK)
+
+
+if __name__ == "__main__":
+    env = os.environ.get("ENV")
+    if env == "GCP_RUN":
+        # Google Cloud Run wants us to listen and respond to a HTTP request
+        app = Flask(__name__)
+        app.add_url_rule("/", "main", main_flask_wrapper, methods=["POST"])
+        app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    else:
+        asyncio.run(main_wrapper())

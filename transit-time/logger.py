@@ -5,7 +5,8 @@ import google.cloud.logging
 
 
 def setup():
-    if os.environ.get("ENV") == "PROD" or "GAE_INSTANCE" in os.environ:
+    env = os.environ.get("ENV")
+    if env == "PROD" or env == "GCP_RUN" or "GAE_INSTANCE" in os.environ:
         client = google.cloud.logging.Client()
         client.setup_logging()
     else:

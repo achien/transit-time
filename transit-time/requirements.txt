@@ -4,6 +4,7 @@ aiopg
 async_lru
 asyncpg
 dateparser
+Flask
 GeoAlchemy2
 google-cloud-logging
 gunicorn

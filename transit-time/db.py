@@ -59,7 +59,7 @@ def acquire_asyncpg_conn():
 
 def get_sa_engine():
     return sa.create_engine(
-        "postgresql+psycopg2://{user}:{password}@{host}/{database}".format(
+        "postgresql+psycopg2://{user}:{password}@/{database}?host={host}".format(
             **_get_postgres_info()
         )
     )
