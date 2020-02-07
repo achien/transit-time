@@ -43,7 +43,7 @@ async def teardown():
 
     global _asyncpg_pool
     await _asyncpg_pool.close()
-    logging.info("[async] database connection closed")
+    logging.info("[asyncpg] database connection closed")
     _asyncpg_pool = None
 
 
