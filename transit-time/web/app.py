@@ -1,7 +1,6 @@
 import os
 
 from starlette.applications import Starlette
-from starlette.middleware import Middleware
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
