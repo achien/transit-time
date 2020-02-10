@@ -43,5 +43,5 @@ app = Starlette(
     routes=routes,
     on_startup=[db.setup],
     on_shutdown=[db.teardown],
-    debug=(os.environ.get("ENV") != "PROD"),
+    debug=(os.environ.get("ENV") != "prod"),
 )

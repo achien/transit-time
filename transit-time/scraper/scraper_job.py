@@ -77,9 +77,7 @@ async def process_feed_with_retries(feed_id: str, max_retries: int):
         logging.info("Retrying feed %s", feed_id)
 
 
-async def main():
-    db.create_tables()
-
+async def scrape():
     results = await a.gatherd(
         {
             feed_id: process_feed_with_retries(feed_id, MAX_RETRIES)
@@ -105,13 +103,14 @@ async def main():
             )
 
 
-async def main_wrapper():
+async def main():
     try:
+        db.create_tables()
         await db.setup()
-        await main()
+        await scrape()
     finally:
         await db.teardown()
 
 
 if __name__ == "__main__":
-    asyncio.run(main_wrapper())
+    asyncio.run(main())

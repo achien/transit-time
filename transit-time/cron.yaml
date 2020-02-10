@@ -1,0 +1,5 @@
+cron:
+  - description: "scrapes MTA subway data"
+    url: /scraper
+    schedule: every 1 minutes
+    target: tasks
