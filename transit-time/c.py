@@ -1,4 +1,5 @@
-from typing import List, Callable
+import asyncio
+from typing import Awaitable, Callable, List, TypeVar
 
 
 def chunk(l: List, size: int) -> List[List]:
@@ -27,3 +28,11 @@ def unique(l: List, key: Callable):
 def only(l: List):
     assert len(l) == 1
     return l[0]
+
+
+T = TypeVar("T")
+
+
+async def afilter(fun: Callable[[T], Awaitable], l: List[T]) -> List[T]:
+    to_keep = await asyncio.gather(*[fun(x) for x in l])
+    return [x for (i, x) in enumerate(l) if to_keep[i]]

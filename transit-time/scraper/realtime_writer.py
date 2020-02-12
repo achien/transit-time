@@ -19,6 +19,7 @@ class RealtimeWriter:
 
     async def write_message(self, message: gtfs.FeedMessage):
         assert self.system == message.system
+        await self.parser.fix_feed_mesesage(message)
         # for trip_update in message.trip_updates:
         #     await self._write_trip_update(trip_update, message)
         # for position in message.vehicle_positions:
@@ -41,9 +42,6 @@ class RealtimeWriter:
     async def _write_trip_update(
         self, update: gtfs.TripUpdate, message: gtfs.FeedMessage
     ):
-        if not self.parser.is_valid_trip_descriptor(update.trip, message):
-            return
-
         trip = await self.parser.get_trip_row_from_descriptor(update.trip)
         if trip is None:
             if not message.is_trip_replaced(update.trip.route_id):
@@ -55,34 +53,7 @@ class RealtimeWriter:
                     message.timestamp,
                 )
 
-        async def get_insert_values(stop_time_update) -> Optional[Tuple[str, Dict]]:
-            # For some reason, stop_id does not always exist (wtf MTA?).
-            # In that case, don't do any writes because that will fail on the
-            # foreign key constraint.
-            stop_exists = await self.parser.get_stop_exists(stop_time_update.stop_id)
-            if not stop_exists:
-                logging.debug(
-                    "Encountered nonexistent stop %s in trip update (%s, %s, %s) at %s",
-                    stop_time_update.stop_id,
-                    update.trip.trip_id,
-                    update.trip.route_id,
-                    update.trip.start_date,
-                    message.timestamp,
-                )
-                return None
-
-            if stop_time_update.arrival is None and stop_time_update.departure is None:
-                logging.warning(
-                    "No arrival or departure for stop %s in trip update "
-                    "(%s, %s, %s) at %s",
-                    stop_time_update.stop_id,
-                    update.trip.trip_id,
-                    update.trip.route_id,
-                    update.trip.start_date,
-                    message.timestamp,
-                )
-                return None
-
+        def get_insert_values(stop_time_update) -> Optional[Tuple[str, Dict]]:
             values = {
                 "system": self.system.value,
                 "route_id": update.trip.route_id,
@@ -104,10 +75,9 @@ class RealtimeWriter:
             )
             return (key, values)
 
-        insert_key_values = await asyncio.gather(
-            *[get_insert_values(update) for update in update.stop_time_updates]
-        )
-        insert_key_values = [v for v in insert_key_values if v is not None]
+        insert_key_values = [
+            get_insert_values(update) for update in update.stop_time_updates
+        ]
         if len(insert_key_values) == 0:
             return
 
@@ -140,9 +110,6 @@ class RealtimeWriter:
     async def _write_vehicle_position(
         self, position: gtfs.VehiclePosition, message: gtfs.FeedMessage
     ):
-        if not self.parser.is_valid_trip_descriptor(position.trip, message):
-            return
-
         trip = await self.parser.get_trip_row_from_descriptor(position.trip)
         if trip is None:
             if not message.is_trip_replaced(position.trip.route_id):

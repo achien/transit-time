@@ -36,6 +36,6 @@ DB_ROWS_PARAMS = [
 @pytest.mark.parametrize("spec,rows", DB_ROWS_PARAMS)
 def test_get_db_rows(spec, rows):
     def cmp_key(d):
-        sorted(d.items())
+        return sorted(d.items())
 
     assert sorted(get_db_rows(spec), key=cmp_key) == sorted(rows, key=cmp_key)

@@ -10,9 +10,10 @@ def setup():
         client = google.cloud.logging.Client()
         client.setup_logging()
     else:
+        loglevel = "DEBUG" if env == "debug" else "INFO"
         logging.basicConfig(
             # send INFO and above to stderr
-            level=os.environ.get("LOGLEVEL", "INFO"),
+            level=os.environ.get("LOGLEVEL", loglevel),
             # format with timestamps
             format="[%(asctime)s][%(levelname)s] (%(name)s) %(message)s",
         )

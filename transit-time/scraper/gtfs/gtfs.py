@@ -183,6 +183,12 @@ def _parse_vehicle_position(
 def parse_feed_message(
     transit_system: TransitSystem, feed_id: str, feed_message_pb
 ) -> FeedMessage:
+    """
+    Parses a protobuf feed message into a FeedMessage.
+
+    This is naive and assumes all data is correct.  Should be used with
+    MTARealtimeParser to handle malformed data.
+    """
     header = feed_message_pb.header
     timestamp = datetime.fromtimestamp(header.timestamp, timezone.utc)
     feed_message = FeedMessage(transit_system, feed_id, timestamp,)
@@ -195,20 +201,6 @@ def parse_feed_message(
                 replacement.replacement_period.end, timezone.utc
             )
             feed_message.trip_replacements[route_id] = end_time
-            # MTA data has a bug where they use route_id 'S' instead of 'GS'
-            # in feed 1.  ('S' is not a valid route_id)
-            if feed_message.feed_id == "1" and route_id == "S":
-                # Don't replace 'GS' if MTA fixed their data
-                if "GS" not in feed_message.trip_replacements:
-                    feed_message.trip_replacements["GS"] = end_time
-            # The 6X is probably replaced when the 7 is replaced
-            if route_id == "6":
-                if "6X" not in feed_message.trip_replacements:
-                    feed_message.trip_replacements["6X"] = end_time
-            # The 7X is probably replaced when the 7 is replaced
-            if route_id == "7":
-                if "7X" not in feed_message.trip_replacements:
-                    feed_message.trip_replacements["7X"] = end_time
 
     for entity in feed_message_pb.entity:
         if entity.HasField("trip_update"):

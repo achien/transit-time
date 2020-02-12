@@ -11,6 +11,7 @@ gunicorn
 Jinja2
 protobuf
 pytest
+pytest-asyncio
 python-dateutil
 SQLAlchemy
 starlette
