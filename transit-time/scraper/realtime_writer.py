@@ -2,20 +2,20 @@ import asyncio
 import logging
 from typing import Dict, Optional, Tuple
 
-import sqlalchemy as sa
-from async_lru import alru_cache
 from sqlalchemy.dialects.postgresql import insert
 
 import db
-from scraper import nyc
+from scraper.mta_realtime_parser import MTARealtimeParser
 from scraper.gtfs import gtfs
 
 
 class RealtimeWriter:
     system: gtfs.TransitSystem
+    parser: MTARealtimeParser
 
     def __init__(self, system: gtfs.TransitSystem):
         self.system = system
+        self.parser = MTARealtimeParser(system)
 
     async def write_message(self, message: gtfs.FeedMessage):
         assert self.system == message.system
@@ -41,10 +41,10 @@ class RealtimeWriter:
     async def _write_trip_update(
         self, update: gtfs.TripUpdate, message: gtfs.FeedMessage
     ):
-        if not self._is_valid_trip_descriptor(update.trip, message):
+        if not self.parser.is_valid_trip_descriptor(update.trip, message):
             return
 
-        trip = await self._get_trip_row_from_descriptor(update.trip)
+        trip = await self.parser.get_trip_row_from_descriptor(update.trip)
         if trip is None:
             if not message.is_trip_replaced(update.trip.route_id):
                 logging.warning(
@@ -59,7 +59,7 @@ class RealtimeWriter:
             # For some reason, stop_id does not always exist (wtf MTA?).
             # In that case, don't do any writes because that will fail on the
             # foreign key constraint.
-            stop_exists = await self._get_stop_exists(stop_time_update.stop_id)
+            stop_exists = await self.parser.get_stop_exists(stop_time_update.stop_id)
             if not stop_exists:
                 logging.debug(
                     "Encountered nonexistent stop %s in trip update (%s, %s, %s) at %s",
@@ -140,10 +140,10 @@ class RealtimeWriter:
     async def _write_vehicle_position(
         self, position: gtfs.VehiclePosition, message: gtfs.FeedMessage
     ):
-        if not self._is_valid_trip_descriptor(position.trip, message):
+        if not self.parser.is_valid_trip_descriptor(position.trip, message):
             return
 
-        trip = await self._get_trip_row_from_descriptor(position.trip)
+        trip = await self.parser.get_trip_row_from_descriptor(position.trip)
         if trip is None:
             if not message.is_trip_replaced(position.trip.route_id):
                 logging.warning(
@@ -184,14 +184,14 @@ class RealtimeWriter:
             if self.system == gtfs.TransitSystem.NYC_MTA:
                 return
 
-            stop_id = await self._get_stop_id_from_stop_seq(
+            stop_id = await self.parser.get_stop_id_from_stop_seq(
                 trip["trip_id"], current_stop_sequence
             )
 
         # For some reason, stop_id does not always exist (wtf MTA?).
         # In that case, don't do any writes because that will fail on the
         # foreign key constraint.
-        stop_exists = await self._get_stop_exists(stop_id)
+        stop_exists = await self.parser.get_stop_exists(stop_id)
         if not stop_exists:
             logging.debug(
                 "Encountered nonexistent stop %s in vehicle position "
@@ -233,117 +233,3 @@ class RealtimeWriter:
         )
         async with db.acquire_conn() as conn:
             await conn.execute(stmt)
-
-    def _is_valid_trip_descriptor(
-        self, trip: gtfs.TripDescriptor, message: gtfs.FeedMessage
-    ) -> bool:
-        if trip.route_id is None:
-            # wtf MTA
-            logging.warning(
-                "No route for trip (%s, %s, %s) at %s",
-                trip.trip_id,
-                trip.route_id,
-                trip.start_date,
-                message.timestamp,
-            )
-            return False
-
-        return True
-
-    @alru_cache(maxsize=None)
-    async def _get_trip_row_from_descriptor(self, trip_descriptor: gtfs.TripDescriptor):
-        row = await self._get_trip_row_from_id(trip_descriptor.trip_id)
-        if row is not None:
-            return row
-
-        # table = db.get_table('trips')
-        # async with db.acquire_conn() as conn:
-        #     res = await conn.execute(
-        #         table.select()
-        #         .where(table.c.system == self.system.value)
-        #         .where(table.c.trip_id.like("%" + trip_descriptor.trip_id + "%"))
-        #     )
-        #     row = await res.fetchone()
-        #     if row is not None:
-        #         return row
-
-        if self.system is not gtfs.TransitSystem.NYC_MTA:
-            return None
-
-        # Monday = 0, Sunday = 6
-        day_of_week = trip_descriptor.start_date.weekday()
-        if day_of_week < 5:
-            service_day = nyc.ServiceDay.WEEKDAY
-        elif day_of_week == 5:
-            service_day = nyc.ServiceDay.SATURDAY
-        elif day_of_week == 6:
-            service_day = nyc.ServiceDay.SUNDAY
-        else:
-            raise ValueError(
-                "Unexpected day of week {} for {}".format(
-                    day_of_week, trip_descriptor.start_date
-                )
-            )
-
-        table = db.get_table("mta_trip_id")
-        async with db.acquire_conn() as conn:
-            res = await conn.execute(
-                table.select()
-                .where(table.c.system == self.system.value)
-                .where(table.c.alternate_trip_id == trip_descriptor.trip_id)
-                .where(table.c.service_day == service_day)
-            )
-            rows = await res.fetchall()
-            if len(rows) == 0:
-                return None
-            if len(rows) > 1:
-                trip_ids = [row["trip_id"] for row in rows]
-                logging.info(
-                    "%s: (%s, %s/%s) has multiple trip IDs: (%s)",
-                    self.system,
-                    trip_descriptor.trip_id,
-                    trip_descriptor.start_date,
-                    service_day,
-                    ", ".join(trip_ids),
-                )
-                return None
-            trip_id = rows[0]["trip_id"]
-        return await self._get_trip_row_from_id(trip_id)
-
-    @alru_cache(maxsize=None)
-    async def _get_trip_row_from_id(self, trip_id: str):
-        trips_table = db.get_table("trips")
-        async with db.acquire_conn() as conn:
-            res = await conn.execute(
-                trips_table.select()
-                .where(trips_table.c.system == self.system.value)
-                .where(trips_table.c.trip_id == trip_id)
-            )
-            return await res.fetchone()
-
-    @alru_cache(maxsize=4096)
-    async def _get_stop_id_from_stop_seq(self, trip_id: str, stop_seq: int) -> str:
-        table = db.get_table("stop_times")
-        async with db.acquire_conn() as conn:
-            stop_id = await conn.scalar(
-                sa.select([table.c.stop_id])
-                .where(table.c.system == self.system.value)
-                .where(table.c.trip_id == trip_id)
-                .where(table.c.stop_sequence == stop_seq)
-            )
-            if stop_id is None:
-                raise Exception(
-                    "No stop_id for (trip_id, seq): ({}, {})".format(trip_id, stop_seq)
-                )
-            return stop_id
-
-    @alru_cache(maxsize=None)
-    async def _get_stop_exists(self, stop_id: str) -> bool:
-        table = db.get_table("stops")
-        async with db.acquire_conn() as conn:
-            res = await conn.scalar(
-                sa.select([table.c.stop_id])
-                .where(table.c.system == self.system.value)
-                .where(table.c.stop_id == stop_id)
-            )
-            return res is not None
