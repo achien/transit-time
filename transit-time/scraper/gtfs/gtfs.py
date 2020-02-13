@@ -43,6 +43,7 @@ class TripDescriptor(NamedTuple):
     trip_id: str
     route_id: Optional[str]
     start_date: date
+    train_id: Optional[str]
 
 
 class StopTimeUpdate(NamedTuple):
@@ -109,8 +110,16 @@ def _parse_trip_descriptor(trip_pb, transit_system: TransitSystem) -> TripDescri
     if transit_system == TransitSystem.NYC_MTA and route_id == "SS":
         route_id = "SI"
 
+    train_id = None
+    if trip_pb.HasExtension(nyct_subway_pb2.nyct_trip_descriptor):
+        nyct_trip_descriptor = trip_pb.Extensions[nyct_subway_pb2.nyct_trip_descriptor]
+        train_id = nyct_trip_descriptor.train_id
+
     return TripDescriptor(
-        trip_id=trip_pb.trip_id, route_id=route_id, start_date=start_date
+        trip_id=trip_pb.trip_id,
+        route_id=route_id,
+        start_date=start_date,
+        train_id=train_id,
     )
 
 

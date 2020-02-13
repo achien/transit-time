@@ -22,6 +22,7 @@ PAGE_SIZE = timedelta(hours=5)
 
 class RealtimeTripsEndpoint(HTTPEndpoint):
     async def get(self, request):
+        beta = bool(int(request.query_params.get("beta", 0)))
         (start, end, query_start, query_end) = self.get_time_range(request)
 
         next_cursor = None
@@ -38,14 +39,21 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
                 # Shrink query range for this query to be one page
                 query_end = query_start + PAGE_SIZE
 
-        logging.info("Querying realtime data between %s and %s", query_start, query_end)
+        logging.info(
+            "Querying realtime data between %s and %s, beta=%s",
+            query_start,
+            query_end,
+            beta,
+        )
 
         # Break down the query into chunks.  For some reason with larger time
         # ranges the Postgres queries take much much longer.
         chunks = self.get_query_chunks(query_start, query_end)
         chunk_rows = await asyncio.gather(
             *[
-                self.query_chunk_rows(chunk_start, chunk_end, idx, len(chunks))
+                self.query_chunk_rows2(chunk_start, chunk_end, idx, len(chunks))
+                if beta
+                else self.query_chunk_rows(chunk_start, chunk_end, idx, len(chunks))
                 for (idx, (chunk_start, chunk_end)) in enumerate(chunks)
             ]
         )
@@ -54,30 +62,9 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
             rows.extend(cr)
         logging.info("RealtimeTripsEndpoint: %d total rows", len(rows))
 
-        trip_data = {}
-        for row in rows:
-            key = "__".join(
-                (row["route_id"], row["start_date"].isoformat(), row["trip_id"])
-            )
-            if key not in trip_data:
-                trip_data[key] = {
-                    "id": key,
-                    "routeID": row["route_id"],
-                    "stops": [],
-                }
-            arrival = row["arrival"]
-            departure = row["departure"]
-            trip_data[key]["stops"].append(
-                {
-                    "stopID": row["stop_id"],
-                    "arrival": (
-                        arrival.timestamp() if arrival else departure.timestamp()
-                    ),
-                    "departure": (
-                        departure.timestamp() if departure else arrival.timestamp()
-                    ),
-                }
-            )
+        trip_data = (
+            self.construct_response2(rows) if beta else self.construct_response(rows)
+        )
         logging.info("RealtimeTripsEndpoint: constructed %d trip datas", len(trip_data))
 
         return JSONResponse(
@@ -141,6 +128,65 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
         query_end = end + timedelta(minutes=30)
         return (start, end, query_start, query_end)
 
+    def construct_response(self, rows):
+        trip_data = {}
+        for row in rows:
+            key = "__".join(
+                (row["route_id"], row["start_date"].isoformat(), row["trip_id"])
+            )
+            if key not in trip_data:
+                trip_data[key] = {
+                    "id": key,
+                    "routeID": row["route_id"],
+                    "stops": [],
+                }
+            arrival = row["arrival"]
+            departure = row["departure"]
+            trip_data[key]["stops"].append(
+                {
+                    "stopID": row["stop_id"],
+                    "arrival": (
+                        arrival.timestamp() if arrival else departure.timestamp()
+                    ),
+                    "departure": (
+                        departure.timestamp() if departure else arrival.timestamp()
+                    ),
+                }
+            )
+        return trip_data
+
+    def construct_response2(self, rows):
+        trip_data = {}
+        for row in rows:
+            key = "__".join(
+                (
+                    row["route_id"],
+                    row["start_date"].isoformat(),
+                    row["trip_id"],
+                    row["train_id"],
+                )
+            )
+            if key not in trip_data:
+                trip_data[key] = {
+                    "id": key,
+                    "routeID": row["route_id"],
+                    "stops": [],
+                }
+            arrival = row["arrival"]
+            departure = row["departure"]
+            trip_data[key]["stops"].append(
+                {
+                    "stopID": row["stop_id"],
+                    "arrival": (
+                        arrival.timestamp() if arrival else departure.timestamp()
+                    ),
+                    "departure": (
+                        departure.timestamp() if departure else arrival.timestamp()
+                    ),
+                }
+            )
+        return trip_data
+
     async def query_chunk_rows(
         self, start: datetime, end: datetime, chunk_idx: int, total_chunks: int
     ):
@@ -159,6 +205,29 @@ class RealtimeTripsEndpoint(HTTPEndpoint):
                     or (departure is null and arrival >= $2 and arrival < $3)
                 )
             order by coalesce(departure, arrival)
+        """
+        async with db.acquire_asyncpg_conn() as conn:
+            rows = await conn.fetch(query, TRANSIT_SYSTEM.value, start, end)
+        logging.info(
+            "RealtimeTripsEndpoint: %d rows in chunk %d/%d",
+            len(rows),
+            chunk_idx + 1,
+            total_chunks,
+        )
+        return rows
+
+    async def query_chunk_rows2(
+        self, start: datetime, end: datetime, chunk_idx: int, total_chunks: int
+    ):
+        query = """
+            select route_id, start_date, trip_id, train_id, stop_id, arrival, departure
+            from realtime_stop_times2
+            where
+                system=$1
+                and (
+                    departure_or_arrival >= $2 and departure_or_arrival < $3
+                )
+            order by departure_or_arrival
         """
         async with db.acquire_asyncpg_conn() as conn:
             rows = await conn.fetch(query, TRANSIT_SYSTEM.value, start, end)

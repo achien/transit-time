@@ -242,7 +242,6 @@ def init_tables(metadata):
         sa.Column("stop_id", sa.String, nullable=False),
         sa.Column("start_date", sa.Date, nullable=False),
         sa.Column("trip_id", sa.String, nullable=False),
-        sa.Column("timestamp", sa.DateTime(timezone=True)),
         sa.Column("arrival", sa.DateTime(timezone=True), index=True),
         sa.Column("departure", sa.DateTime(timezone=True), index=True),
         sa.Column("update_time", sa.DateTime(timezone=True), nullable=False),
@@ -297,6 +296,60 @@ def init_tables(metadata):
             "trip_id",
             "timestamp",
             unique=True,
+        ),
+        sa.ForeignKeyConstraint(
+            ["system", "route_id"],
+            [tables["routes"].c.system, tables["routes"].c.route_id],
+        ),
+        sa.ForeignKeyConstraint(
+            ["system", "stop_id"],
+            [tables["stops"].c.system, tables["stops"].c.stop_id],
+        ),
+    )
+
+    # Temporary table for processing realtime data
+    tables["realtime_raw_stop_times"] = sa.Table(
+        "realtime_raw_stop_times",
+        metadata,
+        sa.Column("system", sa.String, primary_key=True),
+        sa.Column("route_id", sa.String, primary_key=True),
+        sa.Column("start_date", sa.Date, primary_key=True),
+        sa.Column("trip_id", sa.String, primary_key=True),
+        sa.Column("train_id", sa.String, primary_key=True),
+        sa.Column("time", sa.DateTime(timezone=True), primary_key=True),
+        sa.Column("stop_times", postgresql.JSONB, nullable=False),
+        sa.Column(
+            "update_time", sa.DateTime(timezone=True), nullable=False, index=True
+        ),
+    )
+
+    # Actual stops, based on realtime data.  Can be past or future.
+    tables["realtime_stop_times2"] = sa.Table(
+        "realtime_stop_times2",
+        metadata,
+        sa.Column("system", sa.String, primary_key=True),
+        sa.Column("route_id", sa.String, primary_key=True),
+        sa.Column("start_date", sa.Date, primary_key=True),
+        sa.Column("trip_id", sa.String, primary_key=True),
+        sa.Column("train_id", sa.String, primary_key=True),
+        sa.Column("stop_id", sa.String, primary_key=True),
+        sa.Column("arrival", sa.DateTime(timezone=True)),
+        sa.Column("departure", sa.DateTime(timezone=True)),
+        sa.Column(
+            "departure_or_arrival",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            index=True,
+        ),
+        sa.Column("time", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint("arrival IS NOT NULL OR departure IS NOT NULL"),
+        # Index for lookups.  Not primary key because we might need to add seq
+        # in the future to support trips that reuse stops.
+        sa.Index(
+            "ix_realtime_stop_times2__lookup_stop",
+            "system",
+            "stop_id",
+            "departure_or_arrival",
         ),
         sa.ForeignKeyConstraint(
             ["system", "route_id"],

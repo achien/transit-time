@@ -100,12 +100,24 @@ class BatchProcessor(ABC):
 
     table_name: str
     cols: Tuple[str, ...]
+    # Additional filtering on table
     where: Optional
+    # Column names that form a group (e.g. feed_id).  If groups exist,
+    # each group is processed serially.  This is used if processing requires
+    # all previous rows to be processed first.
+    groups: Tuple[str, ...]
 
-    def __init__(self, table_name: str, cols: Tuple[str, ...], where: Optional = None):
+    def __init__(
+        self,
+        table_name: str,
+        cols: Tuple[str, ...],
+        where: Optional = None,
+        groups: Optional[Tuple[str, ...]] = None,
+    ):
         self.table_name = table_name
         self.cols = cols
         self.where = where
+        self.groups = groups if groups is not None else ()
 
     @abstractmethod
     async def process_row(row):
@@ -187,14 +199,12 @@ class BatchProcessor(ABC):
                 if len(rows) == 0:
                     # results are exhausted
                     break
+                logging.debug("Processing batch of %d rows", len(rows))
 
-                for rows_chunk in c.chunk(rows, CHUNK_SIZE):
-                    await asyncio.gather(*[self.process_row(row) for row in rows_chunk])
-                # for row in rows:
-                #     print("{} / {}".format(row["feed_id"], row["time"]))
-                #     await self.process_row(row)
-                # print(writer._get_trip_row_from_descriptor.cache_info())
-                # print(writer._get_trip_row_from_id.cache_info())
+                if len(self.groups) > 0:
+                    await self.process_as_groups(rows)
+                else:
+                    await self.process_as_chunks(rows)
 
                 rowcount += len(rows)
                 checkpoint_data = {col: rows[-1][col] for col in self.cols}
@@ -206,6 +216,42 @@ class BatchProcessor(ABC):
 
                 if args.job_name:
                     self.write_checkpoint(engine, args.job_name, checkpoint)
+
+    async def process_as_chunks(self, rows):
+        chunks = c.chunk(rows, CHUNK_SIZE)
+        for (i, rows_chunk) in enumerate(chunks):
+            logging.debug(
+                "Processing chunk %d/%d with %d rows",
+                i + 1,
+                len(chunks),
+                len(rows_chunk),
+            )
+            await asyncio.gather(*[self.process_row(row) for row in rows_chunk])
+
+    async def process_as_groups(self, rows):
+        groups = {}
+        for row in rows:
+            group_key = tuple([row[col] for col in self.groups])
+            if group_key not in groups:
+                groups[group_key] = [row]
+            else:
+                groups[group_key].append(row)
+
+        logging.debug("Found %d groups of (%s)", len(groups), ",".join(self.groups))
+
+        async def process_group(group_name, group_rows):
+            for row in group_rows:
+                await self.process_row(row)
+            logging.debug(
+                "Finished processing group %s with %d rows", group_name, len(group_rows)
+            )
+
+        await asyncio.gather(
+            *[
+                process_group(group_name, group_rows)
+                for (group_name, group_rows) in groups.items()
+            ]
+        )
 
 
 class RealtimeRawCheckpointDEPRECATED(Checkpoint):

@@ -148,6 +148,7 @@ async function loadTrains() {
   url.searchParams.set('start', startElem.value);
   url.searchParams.set('end', endElem.value);
   url.searchParams.set('paginate', '1');
+  url.searchParams.set('beta', '1');
   let resp = await fetch(url.href);
   let { start, end, cursor, tripData } = await resp.json();
   console.log(
