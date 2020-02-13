@@ -6,7 +6,8 @@ const ROUTE_COLORS: Record<string, string> = {
   A: '#2850AD',
   C: '#2850AD',
   E: '#2850AD',
-  H: '#2850AD',
+  // H is internal for S! https://en.wikipedia.org/wiki/Rockaway_Park_Shuttle
+  H: '#808183',
 
   B: '#FF6319',
   D: '#FF6319',
